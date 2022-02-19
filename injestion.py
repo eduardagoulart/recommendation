@@ -22,17 +22,24 @@ def select_columns_need(imdb, web, all_series):
     """
 
     imdb_filter = imdb.selectExpr(
-        "Name", "Date AS year_released_imdb", "Genre as genre_imdb"
+        "Name",
+        "Date AS year_released_imdb",
+        "Genre AS genre_imdb",
+        "Rate AS imdb_rating",
     )
 
     web_filter = web.selectExpr(
         "`Series Title` as Name",
         "`Year Released` AS year_released_web",
         "Genre AS genre_web",
+        "`IMDB Rating` AS web_rating",
     )
 
     all_series_filter = all_series.selectExpr(
-        "`Series_Title` as Name", "`Runtime_of_Series` as runtime", "Genre AS genre_all"
+        "`Series_Title` AS Name",
+        "`Runtime_of_Series` AS runtime",
+        "Genre AS genre_all",
+        "`IMDB_Rating` AS all_rating",
     )
     return imdb_filter, web_filter, all_series_filter
 
@@ -58,6 +65,14 @@ def combine_and_filter(df):
     )
 
     df = df.withColumn(
+        "rating",
+        fn.coalesce(
+            fn.col("web_rating"),
+            fn.coalesce(fn.col("imdb_rating"), fn.col("all_rating")),
+        ),
+    )
+
+    df = df.withColumn(
         "genre",
         fn.coalesce(
             fn.col("genre_web"),
@@ -65,7 +80,7 @@ def combine_and_filter(df):
         ),
     )
 
-    return df.select("Name", "year_release", "genre")
+    return df.select("Name", "year_release", "genre", "rating")
 
 
 def run():
