@@ -89,4 +89,4 @@ def run():
     all_series = get_year_from_runtime(all_series)
     df = join_dfs(imdb, web, all_series)
     df = combine_and_filter(df)
-    return df
+    return df.dropDuplicates()
