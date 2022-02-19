@@ -1,52 +1,77 @@
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as fn
-from pyspark.sql.types import IntegerType
 
 
 spark = SparkSession.builder.appName("PySpark").getOrCreate()
 
-imdb = spark.read.csv("datasets/imdb.csv", header=True)
-imdb_filter = imdb.selectExpr(
-    "Name", "Date AS year_released_imdb", "Genre as genre_imdb"
-)
 
-web = spark.read.csv("datasets/web.csv", header=True)
-web_filter = web.selectExpr(
-    "`Series Title` as Name",
-    "`Year Released` AS year_released_web",
-    "Genre AS genre_web",
-)
+def read_all_data():
+    imdb = spark.read.csv("datasets/imdb.csv", header=True)
+    web = spark.read.csv("datasets/web.csv", header=True)
+    all_series = spark.read.csv("datasets/series_data.csv", header=True)
+    return imdb, web, all_series
 
-all_series = spark.read.csv("datasets/series_data.csv", header=True)
-all_series_filter = all_series.selectExpr(
-    "`Series_Title` as Name", "`Runtime_of_Series` as runtime", "Genre AS genre_all"
-)
 
-def get_year_from_runtime(row):
-    print(row)
+def select_columns_need(imdb, web, all_series):
+    """
+    Select all necessary columns and rename them
+    :param imdb: DF
+    :param web: DF
+    :param all_series: DF
+    :return: three DFs
+    """
 
-udf_myFunction = fn.udf(lambda z: get_year_from_runtime(z))
-df = all_series_filter.withColumn("message", udf_myFunction("runtime")) #"_3" being the column name of the column you want to consider
+    imdb_filter = imdb.selectExpr(
+        "Name", "Date AS year_released_imdb", "Genre as genre_imdb"
+    )
 
-# df_web_imdb = web_filter.join(imdb_filter, on="Name", how="outer")
-# df = df_web_imdb.join(all_series_filter, on="Name", how="outer")
-# df.show(5)
-# df = df.withColumn(
-#     "year_release",
-#     fn.coalesce(
-#         fn.col("year_released_web"),
-#         fn.coalesce(fn.col("year_released_imdb"), fn.col("runtime")),
-#     ),
-# )
-#
-# df = df.withColumn(
-#     "year_release",
-#     fn.coalesce(
-#         fn.col("year_released_web"),
-#         fn.coalesce(fn.col("year_released_imdb"), fn.col("runtime")),
-#     ),
-# )
-# df.show(5)
-# print(df.select('year_release').distinct().collect())
-#
-#
+    web_filter = web.selectExpr(
+        "`Series Title` as Name",
+        "`Year Released` AS year_released_web",
+        "Genre AS genre_web",
+    )
+
+    all_series_filter = all_series.selectExpr(
+        "`Series_Title` as Name", "`Runtime_of_Series` as runtime", "Genre AS genre_all"
+    )
+    return imdb_filter, web_filter, all_series_filter
+
+
+def get_year_from_runtime(all_series):
+    return all_series.withColumn(
+        "year", fn.split(all_series["runtime"], "–").getItem(0)
+    ).withColumn("year", fn.regexp_replace(fn.col("year"), "[(]", ""))
+
+
+def join_dfs(imdb, web, all_series):
+    df_web_imdb = web.join(imdb, on="Name", how="outer")
+    return df_web_imdb.join(all_series, on="Name", how="outer")
+
+
+def combine_and_filter(df):
+    df = df.withColumn(
+        "year_release",
+        fn.coalesce(
+            fn.col("year_released_web"),
+            fn.coalesce(fn.col("year_released_imdb"), fn.col("year")),
+        ),
+    )
+
+    df = df.withColumn(
+        "genre",
+        fn.coalesce(
+            fn.col("genre_web"),
+            fn.coalesce(fn.col("genre_all"), fn.col("genre_imdb")),
+        ),
+    )
+
+    return df.select("Name", "year_release", "genre")
+
+
+if __name__ == "__main__":
+    imdb, web, all_series = read_all_data()
+    imdb, web, all_series = select_columns_need(imdb, web, all_series)
+    all_series = get_year_from_runtime(all_series)
+    df = join_dfs(imdb, web, all_series)
+    df = combine_and_filter(df)
+    df.show(5)
