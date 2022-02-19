@@ -68,10 +68,10 @@ def combine_and_filter(df):
     return df.select("Name", "year_release", "genre")
 
 
-if __name__ == "__main__":
+def run():
     imdb, web, all_series = read_all_data()
     imdb, web, all_series = select_columns_need(imdb, web, all_series)
     all_series = get_year_from_runtime(all_series)
     df = join_dfs(imdb, web, all_series)
     df = combine_and_filter(df)
-    df.show(5)
+    return df
